@@ -40,12 +40,14 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     overscroll-behavior: none;
     touch-action: none;
+    overflow: hidden;
   }
 
   #app {
     display: flex;
     align-items: stretch;
     height: 100%;
+    height: 100dvh;
     max-width: 520px;
     margin: 0 auto;
   }
@@ -60,31 +62,43 @@
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
 
-  /* Gatillos L / R */
+  /* Gatillos L / R: pestañas pegadas a los bordes, bajo la pantalla */
   #shoulders {
     display: flex;
     justify-content: space-between;
-    padding: 12px 18px 0;
+  }
+
+  /* Todas las teclas juntas, a mitad de camino entre el final de la pantalla
+     y el final de la ventana. */
+  #keys {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 60px;
+    padding-bottom: env(safe-area-inset-bottom);
+    min-height: 0;
   }
   .shoulder {
-    width: 104px;
-    height: 30px;
+    width: 40%;
+    height: 38px;
     border: none;
-    border-radius: 16px 16px 6px 6px;
     background: var(--shoulder);
     color: var(--label);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
     letter-spacing: 1px;
     box-shadow: 0 2px 0 rgba(0,0,0,0.3);
   }
+  #btn-l { border-radius: 0 0 22px 0; }
+  #btn-r { border-radius: 0 0 0 22px; }
   .shoulder.active { background: var(--shoulder-active); }
 
   #top-deco {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 22px 4px;
+    padding: 10px 22px 2px;
   }
 
   #led {
@@ -100,6 +114,7 @@
   }
 
   #top-deco .brand {
+    margin: 10px 0px;
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 1px;
@@ -108,19 +123,22 @@
   }
 
   #screen-wrap {
-    margin: 4px 18px 0;
-    background: var(--bezel);
-    border-radius: 14px;
-    padding: 14px;
-    box-shadow: inset 0 2px 6px rgba(0,0,0,0.6), 0 2px 3px rgba(0,0,0,0.25);
+    margin: 10px 0px;
+    background: none;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+    display: flex;
+    justify-content: center;
   }
 
   #gb-canvas {
     display: block;
-    width: 100%;
     aspect-ratio: 240 / 160;
+    height: min(46dvh, calc(min(100vw, 520px) * 0.6667));
+    width: auto;
     background: var(--lcd);
-    border-radius: 3px;
+    border-radius: 0;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
     -webkit-user-drag: none;
@@ -138,12 +156,11 @@
   #hint.show { display: block; }
 
   #controls {
-    flex: 1;
+    flex: none;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
-    padding: 18px 22px calc(18px + env(safe-area-inset-bottom));
-    gap: 20px;
+    padding: 0 22px;
+    gap: 14px;
   }
 
   .pad-row {
@@ -155,8 +172,8 @@
   /* D-pad */
   #dpad {
     position: relative;
-    width: 144px;
-    height: 144px;
+    width: 132px;
+    height: 132px;
   }
   .dpad-btn {
     position: absolute;
@@ -164,11 +181,11 @@
     border: none;
   }
   .dpad-btn.active { background: var(--dpad-active); }
-  #dpad-up    { top: 0;    left: 48px; width: 48px; height: 48px; border-radius: 6px 6px 0 0; }
-  #dpad-down  { bottom: 0; left: 48px; width: 48px; height: 48px; border-radius: 0 0 6px 6px; }
-  #dpad-left  { top: 48px; left: 0;    width: 48px; height: 48px; border-radius: 6px 0 0 6px; }
-  #dpad-right { top: 48px; right: 0;   width: 48px; height: 48px; border-radius: 0 6px 6px 0; }
-  #dpad-center{ top: 48px; left: 48px; width: 48px; height: 48px; background: var(--dpad); }
+  #dpad-up    { top: 0;    left: 44px; width: 44px; height: 44px; border-radius: 6px 6px 0 0; }
+  #dpad-down  { bottom: 0; left: 44px; width: 44px; height: 44px; border-radius: 0 0 6px 6px; }
+  #dpad-left  { top: 44px; left: 0;    width: 44px; height: 44px; border-radius: 6px 0 0 6px; }
+  #dpad-right { top: 44px; right: 0;   width: 44px; height: 44px; border-radius: 0 6px 6px 0; }
+  #dpad-center{ top: 44px; left: 44px; width: 44px; height: 44px; background: var(--dpad); }
 
   /* A/B */
   #face-buttons {
@@ -183,10 +200,10 @@
     align-items: center;
     gap: 6px;
   }
-  #btn-b-wrap { margin-top: 26px; }
+  #btn-b-wrap { margin-top: 22px; }
   .face-btn {
-    width: 58px;
-    height: 58px;
+    width: 54px;
+    height: 54px;
     border-radius: 50%;
     background: var(--accent);
     border: none;
@@ -205,8 +222,10 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 22px;
+    gap: 20px;
     transform: rotate(-20deg);
+    margin-top: 2px;
+    margin-bottom: 8px;
   }
   .meta-wrap {
     display: flex;
@@ -256,11 +275,6 @@
 <body>
 <div id="app">
   <div id="gb-shell">
-    <div id="shoulders">
-      <button class="shoulder" id="btn-l" data-btn="9">L</button>
-      <button class="shoulder" id="btn-r" data-btn="8">R</button>
-    </div>
-
     <div id="top-deco">
       <div id="led"></div>
       <span class="brand">POWER</span>
@@ -270,6 +284,12 @@
       <canvas id="gb-canvas" width="240" height="160"></canvas>
     </div>
     <p id="hint"></p>
+
+    <div id="keys">
+    <div id="shoulders">
+      <button class="shoulder" id="btn-l" data-btn="9">L</button>
+      <button class="shoulder" id="btn-r" data-btn="8">R</button>
+    </div>
 
     <div id="controls">
       <div class="pad-row">
@@ -306,6 +326,7 @@
           <span class="meta-label">2X</span>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </div>

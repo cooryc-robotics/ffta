@@ -13,6 +13,12 @@ if(EMSCRIPTEN OR NO_THREADS)
 	set(MGBA_NO_THREADS ON)
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DDISABLE_THREADING")
 endif()
+
+# mGBA compila en C11 estricto y activa _GNU_SOURCE solo en Linux; sin él,
+# Emscripten no declara strdup/strlcpy/PATH_MAX.
+if(EMSCRIPTEN)
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE")
+endif()
 add_subdirectory(src/mgba EXCLUDE_FROM_ALL)
 
 # El wrapper tiene que compilarse con EXACTAMENTE las mismas macros que
