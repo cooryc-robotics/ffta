@@ -224,14 +224,14 @@
     align-items: center;
     gap: 20px;
     transform: rotate(-20deg);
-    margin-top: 2px;
+    margin-top: 20px;
     margin-bottom: 8px;
   }
   .meta-wrap {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 5px;
+    gap: 0;
   }
   .meta-btn {
     width: 56px;
@@ -270,6 +270,69 @@
   }
   #fast-toggle.on { background: var(--led-on); }
   #fast-toggle.on::after { transform: translateX(18px); }
+
+  /* Botón para volver al menú de juegos */
+  #menu-btn {
+    margin-left: auto;
+    border: none;
+    border-radius: 10px;
+    padding: 5px 12px;
+    background: var(--shoulder);
+    color: var(--label);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  #menu-btn:active { background: var(--shoulder-active); }
+
+  /* Menú de selección de juego (pantalla completa, con scroll propio) */
+  #menu {
+    position: fixed;
+    inset: 0;
+    max-width: 520px;
+    margin: 0 auto;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    padding: calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, var(--shell), var(--shell-dark));
+    overflow-y: auto;
+    touch-action: pan-y;
+  }
+  #menu.hidden { display: none; }
+  #menu h1 {
+    margin: 0 0 6px;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--label);
+  }
+  #menu-status {
+    min-height: 18px;
+    margin: 0 0 16px;
+    font-size: 13px;
+    color: var(--label);
+    opacity: 0.8;
+  }
+  #menu-status.error { color: #ffb4b4; opacity: 1; }
+  .menu-item {
+    display: block;
+    width: 100%;
+    min-height: 58px;
+    margin: 0 0 10px;
+    padding: 0 18px;
+    border: none;
+    border-radius: 14px;
+    background: var(--shoulder);
+    color: var(--label);
+    font-size: 16px;
+    font-weight: 600;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.3);
+  }
+  .menu-item:active { background: var(--shoulder-active); }
 </style>
 </head>
 <body>
@@ -278,6 +341,7 @@
     <div id="top-deco">
       <div id="led"></div>
       <span class="brand">POWER</span>
+      <button id="menu-btn">MENU</button>
     </div>
 
     <div id="screen-wrap">
@@ -329,6 +393,13 @@
     </div>
     </div>
   </div>
+</div>
+
+<!-- Menú de selección de juego -->
+<div id="menu">
+  <h1>Selecciona un juego</h1>
+  <p id="menu-status">Cargando emulador…</p>
+  <div id="menu-list"></div>
 </div>
 
 <script src="gb.js"></script>

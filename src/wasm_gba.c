@@ -50,10 +50,31 @@ static uint8_t save_prev[SAVE_SIZE];
 
 static uint32_t keys = 0;
 
-/* Reserva el buffer donde JS copia los bytes del .gba. */
+/* Libera el juego actual (si lo hay). Hay que hacerlo ANTES de liberar el
+ * buffer del ROM, porque el núcleo lo tiene mapeado. */
+static void teardown(void)
+{
+	if (!core)
+		return;
+	if (audio_ready) {
+		mAudioResamplerDeinit(&resampler);
+		mAudioBufferDeinit(&audio_dest);
+		audio_ready = 0;
+	}
+	core->deinit(core);
+	core = NULL;
+	keys = 0;
+}
+
+/* Reserva el buffer donde JS copia los bytes del .gba. Se puede llamar
+ * varias veces (para cambiar de juego): limpia el anterior y deja la
+ * partida guardada en blanco para que no se mezcle con la del siguiente. */
 EMSCRIPTEN_KEEPALIVE
 uint8_t *em_alloc_rom(uint32_t size)
 {
+	teardown();
+	memset(savedata, 0xFF, SAVE_SIZE);
+	memset(save_prev, 0xFF, SAVE_SIZE);
 	free(rom_buf);
 	rom_buf = malloc(size);
 	rom_size = size;
@@ -72,15 +93,7 @@ uint32_t em_get_save_size(void) { return SAVE_SIZE; }
 EMSCRIPTEN_KEEPALIVE
 int em_start(void)
 {
-	if (core) {
-		if (audio_ready) {
-			mAudioResamplerDeinit(&resampler);
-			mAudioBufferDeinit(&audio_dest);
-			audio_ready = 0;
-		}
-		core->deinit(core);
-		core = NULL;
-	}
+	teardown();
 	if (!rom_buf)
 		return 1;
 
@@ -96,6 +109,9 @@ int em_start(void)
 	core->setAudioBufferSize(core, 1024);
 
 	mCoreConfigSetDefaultValue(&core->config, "idleOptimization", "remove");
+	/* Sin esto el volumen de mGBA vale 0 y todo suena en silencio (los
+	 * frontends de mGBA lo fijan siempre; 0x100 = volumen máximo). */
+	mCoreConfigSetDefaultIntValue(&core->config, "volume", 0x100);
 	mCoreLoadConfig(core);
 
 	struct VFile *vf = VFileFromMemory(rom_buf, rom_size);
@@ -189,3 +205,7 @@ int em_save_changed(void)
 	memcpy(save_prev, savedata, SAVE_SIZE);
 	return 1;
 }
+
+/* Detiene el juego actual (para volver al menú). */
+EMSCRIPTEN_KEEPALIVE
+void em_stop(void) { teardown(); }

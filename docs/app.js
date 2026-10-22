@@ -1,63 +1,133 @@
 /* app.js — pega el núcleo WASM de mGBA (gb.js/gb.wasm) con el DOM.
  *
- * Versión "un solo juego": el ROM se carga automáticamente desde
- * ROM_URL al arrancar, sin selector de archivo ni menú superior.
+ * Al abrir la web se muestra un menú con los juegos de roms.json; el botón
+ * MENU permite volver a él para cambiar de juego.
  */
 
 (() => {
-  const ROM_URL = 'rom.gba'; // pon tu archivo .gba en web/ con este nombre (o cambia esto)
+  const ROMS_URL = 'roms.json';
+  // Si no hay roms.json se intenta con un único ROM llamado rom.gba.
+  const FALLBACK_ROMS = [{ title: 'Juego', file: 'rom.gba' }];
   const W = 240, H = 160;
 
   const canvas = document.getElementById('gb-canvas');
   const ctx = canvas.getContext('2d');
-  const hint = document.getElementById('hint');
+  const menu = document.getElementById('menu');
+  const menuList = document.getElementById('menu-list');
+  const menuStatus = document.getElementById('menu-status');
+  const menuBtn = document.getElementById('menu-btn');
 
   let Module = null;
   let running = false;
+  let rafHandle = 0;
+  let starting = false;
   let imageData = ctx.createImageData(W, H);
-  let saveKey = null;       // clave localStorage del save actual (o null si el cartucho no tiene batería)
+  let saveKey = null;       // clave localStorage del save actual
   let lastSavedB64 = null;  // para no reescribir localStorage si no ha cambiado nada
 
-  function showError(msg) {
-    hint.textContent = msg;
-    hint.classList.add('show');
-    console.error(msg);
+  function setMenuStatus(msg, isError) {
+    menuStatus.textContent = msg || '';
+    menuStatus.classList.toggle('error', !!isError);
+    if (isError) console.error(msg);
   }
 
-  Promise.all([
-    createGBModule(),
-    fetch(ROM_URL).then((r) => {
-      if (!r.ok) throw new Error('HTTP ' + r.status + ' al pedir ' + ROM_URL);
-      return r.arrayBuffer();
-    }),
-  ])
-    .then(([mod, romBuf]) => {
-      Module = mod;
-      loadRom(new Uint8Array(romBuf));
-    })
-    .catch((err) => {
-      showError('No se pudo cargar el juego: ' + err);
-    });
+  async function loadRomList() {
+    try {
+      const r = await fetch(ROMS_URL, { cache: 'no-cache' });
+      if (r.ok) {
+        const list = await r.json();
+        if (Array.isArray(list)) {
+          const ok = list.filter((e) => e && typeof e.file === 'string');
+          if (ok.length) return ok;
+        }
+      }
+    } catch (e) { /* sin roms.json: probamos el ROM suelto */ }
+    return FALLBACK_ROMS;
+  }
 
-  function loadRom(buf) {
+  Promise.all([createGBModule(), loadRomList()])
+    .then(([mod, list]) => {
+      Module = mod;
+      buildMenu(list);
+    })
+    .catch((err) => setMenuStatus('No se pudo iniciar el emulador: ' + err, true));
+
+  function buildMenu(list) {
+    menuList.innerHTML = '';
+    setMenuStatus('');
+    list.forEach((entry) => {
+      const btn = document.createElement('button');
+      btn.className = 'menu-item';
+      btn.textContent = entry.title || entry.file;
+      btn.addEventListener('click', () => startGame(entry));
+      menuList.appendChild(btn);
+    });
+  }
+
+  async function startGame(entry) {
+    if (starting || !Module) return;
+    starting = true;
+    initAudio(); // pulsar un juego es el gesto que exigen los navegadores para el audio
+    setMenuStatus('Cargando ' + (entry.title || entry.file) + '…');
+    try {
+      const url = entry.file.split('/').map(encodeURIComponent).join('/');
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('HTTP ' + r.status + ' al pedir ' + entry.file);
+      const buf = new Uint8Array(await r.arrayBuffer());
+      if (loadRom(buf, entry.file)) {
+        menu.classList.add('hidden');
+        setMenuStatus('');
+      }
+    } catch (err) {
+      setMenuStatus('No se pudo cargar el juego: ' + err, true);
+    }
+    starting = false;
+  }
+
+  function loadRom(buf, key) {
     const ptr = Module._em_alloc_rom(buf.length);
     Module.HEAPU8.set(buf, ptr);
 
     // La partida guardada (si hay) tiene que estar en su sitio antes de arrancar.
-    setupSaveSlot(ROM_URL, buf.length);
+    setupSaveSlot(key, buf.length);
 
     const err = Module._em_start();
     if (err !== 0) {
-      showError('No se pudo cargar el ROM (código ' + err + ')');
-      return;
+      setMenuStatus('No se pudo cargar el ROM (código ' + err + ')', true);
+      return false;
     }
 
     const led = document.getElementById('led');
     if (led) led.classList.add('on');
 
     running = true;
-    requestAnimationFrame(frame);
+    lastTime = null;
+    accumulator = 0;
+    cancelAnimationFrame(rafHandle);
+    rafHandle = requestAnimationFrame(frame);
+    return true;
   }
+
+  function goToMenu() {
+    if (!Module) return;
+    saveNow();
+    running = false;
+    cancelAnimationFrame(rafHandle);
+
+    // Soltar cualquier botón que quedara pulsado.
+    for (let b = 0; b < 10; b++) Module._em_set_button(b, 0);
+    document.querySelectorAll('[data-btn].active').forEach((el) => el.classList.remove('active'));
+
+    Module._em_stop();
+    saveKey = null;
+    const led = document.getElementById('led');
+    if (led) led.classList.remove('on');
+
+    setMenuStatus('');
+    menu.classList.remove('hidden');
+  }
+
+  if (menuBtn) menuBtn.addEventListener('click', goToMenu);
 
   /* ---- Guardado de partidas en localStorage ---- */
   // mGBA usa un bloque de 128 KiB para cualquier tipo de guardado (SRAM,
@@ -154,7 +224,7 @@
     }
     if (framesRun > 0) blit();
 
-    requestAnimationFrame(frame);
+    rafHandle = requestAnimationFrame(frame);
   }
 
   function blit() {
@@ -252,7 +322,11 @@
   });
 
   // Evita el gesto de "pull to refresh" / zoom por doble tap en iOS/Android.
-  document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+  document.addEventListener('touchmove', (e) => {
+    // El menú de juegos necesita poder hacer scroll.
+    if (e.target.closest && e.target.closest('#menu')) return;
+    e.preventDefault();
+  }, { passive: false });
 
   /* ---- Toggle de modo rápido (x2) ---- */
   const fastToggle = document.getElementById('fast-toggle');

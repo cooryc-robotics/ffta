@@ -12,6 +12,7 @@ int em_get_audio_frames(void);
 void em_set_button(int, int);
 int em_save_changed(void);
 uint8_t *em_get_save_ptr(void);
+int16_t *em_get_audio_buffer(void);
 
 static void put32(uint8_t *p, uint32_t v)
 {
@@ -75,5 +76,46 @@ int main(void)
 		em_run_frame();
 	int changed = em_save_changed();
 	printf("guardado: changed=%d byte0=0x%02x (esperado 1 y 0x42)\n", changed, em_get_save_ptr()[0]);
-	return (changed == 1 && em_get_save_ptr()[0] == 0x42) ? 0 : 4;
+	if (!(changed == 1 && em_get_save_ptr()[0] == 0x42))
+		return 4;
+
+	/* --- Prueba de audio: ROM que enciende el canal 1 (onda cuadrada) --- */
+	r = em_alloc_rom(sz);
+	memset(r, 0, sz);
+	const uint32_t code3[] = {
+		0xE3A00301, /* mov r0, #0x04000000                  */
+		0xE3A01080, /* mov r1, #0x80                        */
+		0xE1C018B4, /* strh r1,[r0,#0x84] SOUNDCNT_X on     */
+		0xE3A01CFF, /* mov r1, #0xFF00                      */
+		0xE3811077, /* orr r1, r1, #0x77                    */
+		0xE1C018B0, /* strh r1,[r0,#0x80] SOUNDCNT_L        */
+		0xE3A01002, /* mov r1, #2                           */
+		0xE1C018B2, /* strh r1,[r0,#0x82] SOUNDCNT_H 100%   */
+		0xE3A01000, /* mov r1, #0                           */
+		0xE1C016B0, /* strh r1,[r0,#0x60] SOUND1CNT_L       */
+		0xE3A01CF0, /* mov r1, #0xF000                      */
+		0xE3811080, /* orr r1, r1, #0x80                    */
+		0xE1C016B2, /* strh r1,[r0,#0x62] SOUND1CNT_H vol15 */
+		0xE3A01C80, /* mov r1, #0x8000                      */
+		0xE3811B01, /* orr r1, r1, #0x400                   */
+		0xE1C016B4, /* strh r1,[r0,#0x64] SOUND1CNT_X trig  */
+		0xEAFFFFFE, /* b .                                  */
+	};
+	for (unsigned i = 0; i < sizeof(code3) / sizeof(code3[0]); i++)
+		put32(r + i * 4, code3[i]);
+	if (em_start())
+		return 5;
+	int peak = 0;
+	for (int i = 0; i < 60; i++) {
+		em_run_frame();
+		int n = em_get_audio_frames();
+		int16_t *a = em_get_audio_buffer();
+		for (int j = 0; j < n * 2; j++) {
+			int v = a[j] < 0 ? -a[j] : a[j];
+			if (v > peak)
+				peak = v;
+		}
+	}
+	printf("audio: pico de amplitud=%d (esperado > 1000)\n", peak);
+	return peak > 1000 ? 0 : 6;
 }
