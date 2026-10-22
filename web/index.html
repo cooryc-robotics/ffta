@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>GBA Web</title>
+<style>
+  :root {
+    --shell: #5a4fa0;          /* carcasa índigo */
+    --shell-dark: #453b82;
+    --shell-shadow: #2f2760;
+    --page-bg: #17161d;
+    --bezel: #1d1c26;          /* marco gris oscuro de la pantalla */
+    --lcd: #cfd8c4;
+    --dpad: #25242c;
+    --dpad-active: #42404c;
+    --accent: #33304f;         /* botones A/B */
+    --accent-active: #4b4772;
+    --meta: #7a72b5;           /* start/select */
+    --meta-active: #968fcb;
+    --shoulder: #3b336f;
+    --shoulder-active: #5a50a3;
+    --led-off: #4b2a35;
+    --led-on: #5dff8a;
+    --label: #d9d5f3;
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--page-bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+
+  #app {
+    display: flex;
+    align-items: stretch;
+    height: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+
+  /* ---- Carcasa ---- */
+  #gb-shell {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--shell), var(--shell-dark));
+    border-radius: 22px 22px 0 0;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  /* Gatillos L / R */
+  #shoulders {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 18px 0;
+  }
+  .shoulder {
+    width: 104px;
+    height: 30px;
+    border: none;
+    border-radius: 16px 16px 6px 6px;
+    background: var(--shoulder);
+    color: var(--label);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.3);
+  }
+  .shoulder.active { background: var(--shoulder-active); }
+
+  #top-deco {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 22px 4px;
+  }
+
+  #led {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--led-off);
+    box-shadow: inset 0 0 1px rgba(0,0,0,0.4);
+  }
+  #led.on {
+    background: var(--led-on);
+    box-shadow: 0 0 4px 1px var(--led-on);
+  }
+
+  #top-deco .brand {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--label);
+    opacity: 0.55;
+  }
+
+  #screen-wrap {
+    margin: 4px 18px 0;
+    background: var(--bezel);
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.6), 0 2px 3px rgba(0,0,0,0.25);
+  }
+
+  #gb-canvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 240 / 160;
+    background: var(--lcd);
+    border-radius: 3px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    -webkit-user-drag: none;
+    touch-action: none;
+  }
+
+  /* Solo se usa si algo falla al cargar el ROM; el resto del tiempo está oculto. */
+  #hint {
+    display: none;
+    text-align: center;
+    color: var(--label);
+    font-size: 12px;
+    padding: 10px 24px 0;
+  }
+  #hint.show { display: block; }
+
+  #controls {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 18px 22px calc(18px + env(safe-area-inset-bottom));
+    gap: 20px;
+  }
+
+  .pad-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* D-pad */
+  #dpad {
+    position: relative;
+    width: 144px;
+    height: 144px;
+  }
+  .dpad-btn {
+    position: absolute;
+    background: var(--dpad);
+    border: none;
+  }
+  .dpad-btn.active { background: var(--dpad-active); }
+  #dpad-up    { top: 0;    left: 48px; width: 48px; height: 48px; border-radius: 6px 6px 0 0; }
+  #dpad-down  { bottom: 0; left: 48px; width: 48px; height: 48px; border-radius: 0 0 6px 6px; }
+  #dpad-left  { top: 48px; left: 0;    width: 48px; height: 48px; border-radius: 6px 0 0 6px; }
+  #dpad-right { top: 48px; right: 0;   width: 48px; height: 48px; border-radius: 0 6px 6px 0; }
+  #dpad-center{ top: 48px; left: 48px; width: 48px; height: 48px; background: var(--dpad); }
+
+  /* A/B */
+  #face-buttons {
+    display: flex;
+    align-items: flex-end;
+    gap: 18px;
+    transform: rotate(-20deg);
+  }
+  .face-btn-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  #btn-b-wrap { margin-top: 26px; }
+  .face-btn {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.3);
+  }
+  .face-btn.active { background: var(--accent-active); }
+  .face-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--label);
+    opacity: 0.8;
+  }
+
+  /* Start/Select + toggle rápido */
+  #meta-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 22px;
+    transform: rotate(-20deg);
+  }
+  .meta-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+  .meta-btn {
+    width: 56px;
+    height: 18px;
+    border-radius: 10px;
+    background: var(--meta);
+    border: none;
+  }
+  .meta-btn.active { background: var(--meta-active); }
+  .meta-label {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--label);
+    opacity: 0.75;
+  }
+
+  #fast-toggle {
+    width: 40px;
+    height: 22px;
+    border-radius: 12px;
+    background: var(--meta);
+    border: none;
+    position: relative;
+  }
+  #fast-toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #efecff;
+    transition: transform 0.15s ease;
+  }
+  #fast-toggle.on { background: var(--led-on); }
+  #fast-toggle.on::after { transform: translateX(18px); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="gb-shell">
+    <div id="shoulders">
+      <button class="shoulder" id="btn-l" data-btn="9">L</button>
+      <button class="shoulder" id="btn-r" data-btn="8">R</button>
+    </div>
+
+    <div id="top-deco">
+      <div id="led"></div>
+      <span class="brand">POWER</span>
+    </div>
+
+    <div id="screen-wrap">
+      <canvas id="gb-canvas" width="240" height="160"></canvas>
+    </div>
+    <p id="hint"></p>
+
+    <div id="controls">
+      <div class="pad-row">
+        <div id="dpad">
+          <button class="dpad-btn" id="dpad-up"    data-btn="6"></button>
+          <button class="dpad-btn" id="dpad-down"  data-btn="7"></button>
+          <button class="dpad-btn" id="dpad-left"  data-btn="5"></button>
+          <button class="dpad-btn" id="dpad-right" data-btn="4"></button>
+          <div class="dpad-btn" id="dpad-center"></div>
+        </div>
+        <div id="face-buttons">
+          <div class="face-btn-wrap" id="btn-b-wrap">
+            <button class="face-btn" id="btn-b" data-btn="1"></button>
+            <span class="face-label">B</span>
+          </div>
+          <div class="face-btn-wrap">
+            <button class="face-btn" id="btn-a" data-btn="0"></button>
+            <span class="face-label">A</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="meta-row">
+        <div class="meta-wrap">
+          <button class="meta-btn" id="btn-select" data-btn="2"></button>
+          <span class="meta-label">SELECT</span>
+        </div>
+        <div class="meta-wrap">
+          <button class="meta-btn" id="btn-start"  data-btn="3"></button>
+          <span class="meta-label">START</span>
+        </div>
+        <div class="meta-wrap">
+          <button id="fast-toggle" aria-label="Modo rapido x2"></button>
+          <span class="meta-label">2X</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="gb.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
