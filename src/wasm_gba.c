@@ -1,7 +1,8 @@
 /*
  * wasm_gba.c
  *
- * Wrapper de mGBA (Game Boy Advance, MPL-2.0) para WebAssembly. Expone al
+ * Wrapper de mGBA (Game Boy Advance, Game Boy y Game Boy Color, MPL-2.0)
+ * para WebAssembly. Expone al
  * JavaScript funciones simples: cargar ROM, correr un frame, leer pantalla
  * y audio, botones y partida guardada. El orden de inicialización sigue el
  * del frontend libretro de mGBA.
@@ -13,7 +14,9 @@
 
 #include <mgba/core/config.h>
 #include <mgba/core/core.h>
+#include <mgba/gb/core.h>
 #include <mgba/gba/core.h>
+#include <mgba/internal/gb/input.h>
 #include <mgba/internal/gba/input.h>
 #include <mgba-util/audio-buffer.h>
 #include <mgba-util/audio-resampler.h>
@@ -25,8 +28,10 @@
 #define EMSCRIPTEN_KEEPALIVE
 #endif
 
-#define GBA_W 240
-#define GBA_H 160
+/* Búfer de vídeo con margen para la pantalla más grande (SGB con borde:
+ * 256x224). Cada núcleo usa solo la parte que necesita. */
+#define VIDEO_STRIDE 256
+#define VIDEO_MAX_H 224
 #define OUT_RATE 44100
 #define SAVE_SIZE 0x20000 /* 128 KiB: el máximo de un cartucho GBA (Flash 1M) */
 #define AUDIO_OUT_FRAMES 2048
@@ -36,8 +41,10 @@ static struct mCore *core = NULL;
 static uint8_t *rom_buf = NULL;
 static size_t rom_size = 0;
 
-static mColor video[GBA_W * GBA_H];
-static uint32_t framebuffer[GBA_W * GBA_H]; /* RGBA para <canvas> */
+static mColor video[VIDEO_STRIDE * VIDEO_MAX_H];
+static uint32_t framebuffer[VIDEO_STRIDE * VIDEO_MAX_H]; /* RGBA, compacto, para <canvas> */
+static unsigned fb_w = 240, fb_h = 160;
+static int is_gb = 0; /* 0 = GBA, 1 = Game Boy / Game Boy Color */
 
 static struct mAudioBuffer audio_dest;
 static struct mAudioResampler resampler;
@@ -89,21 +96,23 @@ uint8_t *em_get_save_ptr(void) { return savedata; }
 EMSCRIPTEN_KEEPALIVE
 uint32_t em_get_save_size(void) { return SAVE_SIZE; }
 
-/* Crea el emulador con el ROM ya copiado. 0 = OK, distinto de 0 = error. */
+/* Crea el emulador con el ROM ya copiado. kind: 0 = GBA, 1 = Game Boy /
+ * Game Boy Color. Devuelve 0 si todo va bien. */
 EMSCRIPTEN_KEEPALIVE
-int em_start(void)
+int em_start(int kind)
 {
 	teardown();
 	if (!rom_buf)
 		return 1;
 
-	core = GBACoreCreate();
+	is_gb = kind ? 1 : 0;
+	core = is_gb ? GBCoreCreate() : GBACoreCreate();
 	if (!core)
 		return 2;
 
 	mCoreInitConfig(core, NULL);
 	core->init(core);
-	core->setVideoBuffer(core, video, GBA_W);
+	core->setVideoBuffer(core, video, VIDEO_STRIDE);
 
 	/* ~549 muestras por frame a 32768 Hz; margen doble. */
 	core->setAudioBufferSize(core, 1024);
@@ -112,6 +121,8 @@ int em_start(void)
 	/* Sin esto el volumen de mGBA vale 0 y todo suena en silencio (los
 	 * frontends de mGBA lo fijan siempre; 0x100 = volumen máximo). */
 	mCoreConfigSetDefaultIntValue(&core->config, "volume", 0x100);
+	/* Super Game Boy: sin marco, para que la pantalla sea siempre 160x144. */
+	mCoreConfigSetDefaultIntValue(&core->config, "sgb.borders", 0);
 	mCoreLoadConfig(core);
 
 	struct VFile *vf = VFileFromMemory(rom_buf, rom_size);
@@ -126,6 +137,7 @@ int em_start(void)
 	memcpy(save_prev, savedata, SAVE_SIZE);
 
 	core->reset(core);
+	core->currentVideoSize(core, &fb_w, &fb_h);
 
 	/* Resampleo del audio nativo (32768 Hz) a 44100 Hz. */
 	mAudioBufferInit(&audio_dest, 4096, 2);
@@ -149,9 +161,16 @@ void em_run_frame(void)
 	core->setKeys(core, keys);
 	core->runFrame(core);
 
-	/* Pantalla: mGBA deja el canal alfa a 0, el canvas lo necesita a 255. */
-	for (int i = 0; i < GBA_W * GBA_H; i++)
-		framebuffer[i] = video[i] | 0xFF000000u;
+	/* Pantalla: copia compacta (fb_w x fb_h). mGBA deja el canal alfa a 0 y
+	 * el canvas lo necesita a 255. */
+	core->currentVideoSize(core, &fb_w, &fb_h);
+	if (fb_w > VIDEO_STRIDE)
+		fb_w = VIDEO_STRIDE;
+	if (fb_h > VIDEO_MAX_H)
+		fb_h = VIDEO_MAX_H;
+	for (unsigned y = 0; y < fb_h; y++)
+		for (unsigned x = 0; x < fb_w; x++)
+			framebuffer[y * fb_w + x] = video[y * VIDEO_STRIDE + x] | 0xFF000000u;
 
 	/* Audio: resamplear lo que haya salido en este frame. */
 	mAudioResamplerProcess(&resampler);
@@ -159,15 +178,16 @@ void em_run_frame(void)
 	audio_out_frames = (int)n;
 }
 
-/* Pantalla: 240x160 píxeles RGBA (bytes R,G,B,A), listo para ImageData. */
+/* Pantalla: em_fb_width() x em_fb_height() píxeles RGBA (bytes R,G,B,A),
+ * listo para ImageData. 240x160 en GBA, 160x144 en GB/GBC. */
 EMSCRIPTEN_KEEPALIVE
 uint32_t *em_get_framebuffer(void) { return framebuffer; }
 
 EMSCRIPTEN_KEEPALIVE
-int em_fb_width(void) { return GBA_W; }
+int em_fb_width(void) { return (int)fb_w; }
 
 EMSCRIPTEN_KEEPALIVE
-int em_fb_height(void) { return GBA_H; }
+int em_fb_height(void) { return (int)fb_h; }
 
 /* Audio: int16 estéreo intercalado a 44100 Hz. Devuelve nº de frames
  * (pares L/R) disponibles tras el último em_run_frame(). */
@@ -177,7 +197,8 @@ int16_t *em_get_audio_buffer(void) { return audio_out; }
 EMSCRIPTEN_KEEPALIVE
 int em_get_audio_frames(void) { return audio_out_frames; }
 
-/* Botones: 0=A 1=B 2=SELECT 3=START 4=RIGHT 5=LEFT 6=UP 7=DOWN 8=R 9=L */
+/* Botones: 0=A 1=B 2=SELECT 3=START 4=RIGHT 5=LEFT 6=UP 7=DOWN 8=R 9=L
+ * (R y L solo existen en GBA). */
 EMSCRIPTEN_KEEPALIVE
 void em_set_button(int button, int pressed)
 {
@@ -188,7 +209,9 @@ void em_set_button(int button, int pressed)
 	};
 	if (button < 0 || button > 9)
 		return;
-	uint32_t bit = 1u << map[button];
+	if (is_gb && button > 7)
+		return;
+	uint32_t bit = 1u << (is_gb ? button : map[button]);
 	if (pressed)
 		keys |= bit;
 	else

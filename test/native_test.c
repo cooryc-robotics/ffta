@@ -5,7 +5,7 @@
 #include <string.h>
 
 uint8_t *em_alloc_rom(uint32_t);
-int em_start(void);
+int em_start(int kind);
 void em_run_frame(void);
 uint32_t *em_get_framebuffer(void);
 int em_get_audio_frames(void);
@@ -13,6 +13,8 @@ void em_set_button(int, int);
 int em_save_changed(void);
 uint8_t *em_get_save_ptr(void);
 int16_t *em_get_audio_buffer(void);
+int em_fb_width(void);
+int em_fb_height(void);
 
 static void put32(uint8_t *p, uint32_t v)
 {
@@ -38,7 +40,7 @@ int main(void)
 	for (unsigned i = 0; i < sizeof(code) / sizeof(code[0]); i++)
 		put32(r + i * 4, code[i]);
 
-	int rc = em_start();
+	int rc = em_start(0);
 	printf("start rc=%d\n", rc);
 	if (rc)
 		return 1;
@@ -52,6 +54,9 @@ int main(void)
 	uint32_t px = em_get_framebuffer()[0];
 	printf("300 frames ok, audio frames=%ld (esperado ~%d)\n", total, 300 * 738);
 	printf("pixel(0,0)=%08x (esperado ff0000ff = rojo opaco R,G,B,A)\n", px);
+	printf("tamano de pantalla GBA: %dx%d (esperado 240x160)\n", em_fb_width(), em_fb_height());
+	if (em_fb_width() != 240 || em_fb_height() != 160)
+		return 7;
 	printf("guardado cambiado=%d\n", em_save_changed());
 	if (px != 0xff0000ffu)
 		return 2;
@@ -69,7 +74,7 @@ int main(void)
 		put32(r + i * 4, code2[i]);
 	memcpy(r + 0x100, "SRAM_V113", 9); /* así mGBA detecta el tipo de guardado */
 
-	rc = em_start();
+	rc = em_start(0);
 	if (rc)
 		return 3;
 	for (int i = 0; i < 10; i++)
@@ -103,7 +108,7 @@ int main(void)
 	};
 	for (unsigned i = 0; i < sizeof(code3) / sizeof(code3[0]); i++)
 		put32(r + i * 4, code3[i]);
-	if (em_start())
+	if (em_start(0))
 		return 5;
 	int peak = 0;
 	for (int i = 0; i < 60; i++) {
@@ -116,6 +121,61 @@ int main(void)
 				peak = v;
 		}
 	}
-	printf("audio: pico de amplitud=%d (esperado > 1000)\n", peak);
-	return peak > 1000 ? 0 : 6;
+	printf("audio GBA: pico de amplitud=%d (esperado > 1000)\n", peak);
+	if (peak <= 1000)
+		return 6;
+
+	/* --- Game Boy / Game Boy Color: ROM mínima que enciende el canal 1 --- */
+	for (int cgb = 0; cgb <= 1; cgb++) {
+		r = em_alloc_rom(32768);
+		memset(r, 0, 32768);
+		r[0x100] = 0xC3; r[0x101] = 0x50; r[0x102] = 0x01; /* jp 0x0150 */
+		static const uint8_t gb_code[] = {
+			0x3E, 0x80, 0xE0, 0x26, /* NR52 = 0x80 (sonido on)   */
+			0x3E, 0x77, 0xE0, 0x24, /* NR50 = 0x77 (volumen)     */
+			0x3E, 0xFF, 0xE0, 0x25, /* NR51 = 0xFF (izq + der)   */
+			0x3E, 0x80, 0xE0, 0x11, /* NR11 = duty 50%           */
+			0x3E, 0xF0, 0xE0, 0x12, /* NR12 = volumen 15         */
+			0x3E, 0x00, 0xE0, 0x13, /* NR13 = frecuencia baja    */
+			0x3E, 0x87, 0xE0, 0x14, /* NR14 = disparar + freq    */
+			0x18, 0xFE,             /* jr -2                     */
+		};
+		memcpy(r + 0x150, gb_code, sizeof(gb_code));
+		if (cgb)
+			r[0x143] = 0x80;
+		uint8_t sum = 0;
+		for (int i = 0x134; i <= 0x14C; i++)
+			sum = sum - r[i] - 1;
+		r[0x14D] = sum;
+
+		if (em_start(1))
+			return 8;
+		int gpeak = 0;
+		for (int i = 0; i < 60; i++) {
+			em_run_frame();
+			int n = em_get_audio_frames();
+			int16_t *a = em_get_audio_buffer();
+			for (int j = 0; j < n * 2; j++) {
+				int v = a[j] < 0 ? -a[j] : a[j];
+				if (v > gpeak)
+					gpeak = v;
+			}
+		}
+		printf("%s: pantalla %dx%d (esperado 160x144), pico de audio=%d (esperado > 500)\n",
+		       cgb ? "GBC" : "GB ", em_fb_width(), em_fb_height(), gpeak);
+		if (em_fb_width() != 160 || em_fb_height() != 144 || gpeak <= 500)
+			return 9;
+	}
+
+	/* --- Volver a un juego de GBA tras haber usado el núcleo GB --- */
+	r = em_alloc_rom(sz);
+	memset(r, 0, sz);
+	for (unsigned i = 0; i < sizeof(code) / sizeof(code[0]); i++)
+		put32(r + i * 4, code[i]);
+	if (em_start(0))
+		return 10;
+	for (int i = 0; i < 5; i++)
+		em_run_frame();
+	printf("GBA otra vez: pantalla %dx%d, pixel(0,0)=%08x\n", em_fb_width(), em_fb_height(), em_get_framebuffer()[0]);
+	return (em_fb_width() == 240 && em_get_framebuffer()[0] == 0xff0000ffu) ? 0 : 11;
 }

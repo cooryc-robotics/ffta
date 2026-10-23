@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>GBA Web</title>
+<title>Game Boy Web</title>
 <style>
   :root {
     --shell: #5a4fa0;          /* carcasa índigo */
@@ -90,6 +90,8 @@
     letter-spacing: 1px;
     box-shadow: 0 2px 0 rgba(0,0,0,0.3);
   }
+  /* En Game Boy / Color no existen L y R: se ocultan sin mover el resto */
+  body.is-gb #shoulders { visibility: hidden; }
   #btn-l { border-radius: 0 0 22px 0; }
   #btn-r { border-radius: 0 0 0 22px; }
   .shoulder.active { background: var(--shoulder-active); }
@@ -134,8 +136,9 @@
 
   #gb-canvas {
     display: block;
-    aspect-ratio: 240 / 160;
-    height: min(46dvh, calc(min(100vw, 520px) * 0.6667));
+    /* La proporción la fija app.js según el juego: 240x160 (GBA) o 160x144 (GB/GBC) */
+    aspect-ratio: var(--ar-w, 240) / var(--ar-h, 160);
+    height: min(46dvh, calc(min(100vw, 520px) * var(--ar-h, 160) / var(--ar-w, 240)));
     width: auto;
     background: var(--lcd);
     border-radius: 0;
@@ -333,6 +336,39 @@
     box-shadow: 0 2px 0 rgba(0,0,0,0.3);
   }
   .menu-item:active { background: var(--shoulder-active); }
+
+  #menu h2.menu-sub {
+    margin: 14px 0 8px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--label);
+    opacity: 0.7;
+  }
+  .menu-sub.hidden { display: none; }
+
+  /* Juegos guardados en el dispositivo: fila con botón de borrar */
+  .menu-row { display: flex; gap: 8px; margin: 0 0 10px; }
+  .menu-row .menu-item { flex: 1; margin: 0; min-width: 0; }
+  .menu-del {
+    flex: none;
+    width: 58px;
+    border: none;
+    border-radius: 14px;
+    background: var(--shoulder);
+    color: var(--label);
+    font-size: 16px;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.3);
+  }
+  .menu-del:active { background: #7a3b4a; }
+
+  .menu-load {
+    margin-top: 6px;
+    background: transparent;
+    border: 2px dashed rgba(217,213,243,0.45);
+    box-shadow: none;
+    text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -400,6 +436,10 @@
   <h1>Selecciona un juego</h1>
   <p id="menu-status">Cargando emulador…</p>
   <div id="menu-list"></div>
+  <h2 id="menu-local-title" class="menu-sub hidden">En este dispositivo</h2>
+  <div id="menu-local"></div>
+  <button id="menu-load" class="menu-item menu-load">+ Cargar juego del dispositivo</button>
+  <input type="file" id="menu-file" hidden>
 </div>
 
 <script src="gb.js"></script>

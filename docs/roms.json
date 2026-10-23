@@ -24,8 +24,20 @@
     "file": "roms/Need for Speed - Underground 2.gba"
   },
   {
+    "title": "Pokemon Blue",
+    "file": "roms/Pokemon Blue.gb"
+  },
+  {
+    "title": "Pokemon Fire Red",
+    "file": "roms/Pokemon Fire Red.gba"
+  },
+  {
     "title": "Pokemon Mystery Dungeon - Red Rescue Team",
     "file": "roms/Pokemon Mystery Dungeon - Red Rescue Team.gba"
+  },
+  {
+    "title": "Pokemon Silver",
+    "file": "roms/Pokemon Silver.gbc"
   },
   {
     "title": "Pokemon Ultra Violet",
@@ -34,6 +46,10 @@
   {
     "title": "Super Mario Advance 4 - Super Mario Bros 3",
     "file": "roms/Super Mario Advance 4 - Super Mario Bros 3.gba"
+  },
+  {
+    "title": "The Legend of Zelda - Link's Awakening",
+    "file": "roms/The Legend of Zelda - Link's Awakening.gb"
   },
   {
     "title": "The Legend of Zelda - The Minish Cap",

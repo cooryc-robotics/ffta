@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.13)
 project(gba_web C)
 
-# mGBA como librería, solo con el núcleo de GBA y sin extras.
+# mGBA como librería, con los núcleos de GBA y de Game Boy / Color, sin extras.
 set(LIBMGBA_ONLY ON CACHE BOOL "" FORCE)
-set(M_CORE_GB OFF CACHE BOOL "" FORCE)
+set(M_CORE_GB ON CACHE BOOL "" FORCE)
 set(M_CORE_GBA ON CACHE BOOL "" FORCE)
 set(ENABLE_SCRIPTING OFF CACHE BOOL "" FORCE)
 
